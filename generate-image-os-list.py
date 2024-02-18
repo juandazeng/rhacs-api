@@ -1,5 +1,5 @@
 import csv
-import sys
+import argparse
 import json
 import ssl
 import re
@@ -27,15 +27,17 @@ def main():
     # We will modify these global variables
     global rhacsApiUrl, rhacsApiToken, csvFileName, authorizationHeader
     
-    # We need 3 parameters
-    if len(sys.argv) != 4:
-        print("Needs 3 parameters: RHACS API URL, RHACS API token, and the output csv file name")
-        print(f"Usage example: python3 {sys.argv[0]} https://central-stackrox.apps.myocpcluster.com/v1 apitoken123 output.csv")
-        sys.exit(0)
+    # Initialize arguments parser
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-u", "--url", help="RHACS API URL, e.g. https://central-stackrox.apps.myocpcluster.com/v1", required=True)
+    parser.add_argument("-t", "--token", help="RHACS API token", required=True)
+    parser.add_argument("-o", "--output", help="Output CSV file name", required=True)
+    arguments = parser.parse_args()
     
-    rhacsApiUrl = sys.argv[1]
-    rhacsApiToken = sys.argv[2]
-    csvFileName = sys.argv[3]
+    rhacsApiUrl = arguments.url
+    rhacsApiToken = arguments.token
+    csvFileName = arguments.output
 
     # Prepare for API calls
     authorizationHeader = {
