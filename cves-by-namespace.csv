@@ -1,0 +1,15 @@
+Cluster Name,Environment,Cluster Descriptor,Namespace,Total CVEs,Fixable CVEs
+aap,cluster,,aap,262,10
+aap,cluster,,my-rhacs-securedcluster,173,7
+aap,cluster,,rhacs-operator,74,21
+aap,cluster,,kube-node-lease,0,0
+aap,cluster,,test1,0,0
+aap,cluster,,kube-public,0,0
+aap,cluster,,kube-system,0,0
+aap,cluster,,default,0,0
+production,,,stackrox,173,7
+production,,,rhacs-operator,74,21
+production,,,kube-system,0,0
+production,,,default,0,0
+production,,,kube-public,0,0
+production,,,kube-node-lease,0,0

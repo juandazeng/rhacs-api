@@ -22,7 +22,7 @@ IS_INCLUDE_OPENSHIFT_NAMESPACE = False
 CLUSTER_INFO_REGEX = r"([^\W_]+)(?:[\W_]+([^\W_]+)(?:[\W_]+(.*))?)?$"
 
 # Prepare for API calls
-rhacsApiUrl = None
+rhacsCentralUrl = None
 rhacsApiToken = None
 csvFileName = None
 authorizationHeader = None
@@ -33,17 +33,17 @@ requestContext.verify_mode = ssl.CERT_NONE
 # Main function
 def main():
     # We will modify these global variables
-    global rhacsApiUrl, rhacsApiToken, csvFileName, authorizationHeader
+    global rhacsCentralUrl, rhacsApiToken, csvFileName, authorizationHeader
     
     # Initialize arguments parser
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-u", "--url", help="RHACS API URL, e.g. https://central-stackrox.apps.myocpcluster.com/v1", required=True)
+    parser.add_argument("-u", "--url", help="RHACS Central URL, e.g. https://central-stackrox.apps.myocpcluster.com", required=True)
     parser.add_argument("-t", "--token", help="RHACS API token", required=True)
     parser.add_argument("-o", "--output", help="Output CSV file name", required=True)
     arguments = parser.parse_args()
     
-    rhacsApiUrl = arguments.url
+    rhacsCentralUrl = arguments.url
     rhacsApiToken = arguments.token
     csvFileName = arguments.output
 
@@ -189,7 +189,7 @@ def main():
         print(f"Successfully generated {csvFileName}\n")
                     
 def getJsonFromRhacsApi(requestPath):
-    url=rhacsApiUrl + requestPath
+    url=rhacsCentralUrl + "/v1" + requestPath
     with urlopen(Request(
         url=url,
         headers=authorizationHeader),

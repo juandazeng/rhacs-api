@@ -1,0 +1,3 @@
+Cluster Name,Environment,Cluster Descriptor,Total CVEs,Fixable CVEs
+aap,cluster,,0,0
+production,,,4,4
