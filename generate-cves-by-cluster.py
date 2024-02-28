@@ -9,8 +9,28 @@ from urllib.parse import urlencode
 from datetime import datetime
 
 # Constants
-CSV_HEADER = ["Cluster Name", "Environment", "Cluster Descriptor", "Total CVEs", "Fixable CVEs"]
-
+CSV_HEADER = [
+    "Cluster Name",
+    "Environment",
+    "Cluster Descriptor",
+    "CVE",
+    "Fixable",
+    "Severity",
+    "CVSS",
+    "Env. Impact",
+    "Impact Score",
+    "Published On",
+    "Discovered On",
+    "Link",
+    "Summary"
+]
+VULNERABILITY_SEVERITY = {
+    "CRITICAL_VULNERABILITY_SEVERITY": "Critical",
+    "IMPORTANT_VULNERABILITY_SEVERITY": "Important",
+    "MODERATE_VULNERABILITY_SEVERITY": "Moderate",
+    "LOW_VULNERABILITY_SEVERITY": "Low",
+    "UNKNOWN_VULNERABILITY_SEVERITY": "Unknown"
+}
 # The cluster regex matches the following:
 # ocps4 - uat_abc_def123 <-- cluster name: ocps4, environment: uat, cluster descriptor: abc_def123
 # ocps4 - uat            <-- cluster name: ocps4, environment: uat
@@ -116,20 +136,31 @@ def main():
                     if responseJson is not None:
                         cves = responseJson["data"]["result"]["clusterVulnerabilities"]
                         cveCount = len(cves)
-                        fixableCveCount = 0
-                        for cve in cves:
-                            if cve["isFixable"] == True:
-                                fixableCveCount += 1
 
-                        # Write the cv e counts into the CSV file
-                        writer.writerow([
-                            clusterName,
-                            clusterEnvironment,
-                            clusterDescriptor,
-                            cveCount,
-                            fixableCveCount
-                        ])
-                        f.flush()
+                        for cve in cves:
+                            # Parse the severity
+                            severity = ""
+                            try:
+                                severity = VULNERABILITY_SEVERITY[cve["severity"]]
+                            except:
+                                pass
+                            # Write the cve details
+                            writer.writerow([
+                                clusterName,
+                                clusterEnvironment,
+                                clusterDescriptor,
+                                cve["cve"],
+                                "Fixable" if cve["isFixable"] else "Not Fixable",
+                                severity,
+                                "{0:.1f}".format(cve["cvss"]),
+                                "{0:.0f}%".format(cve["envImpact"]*100),
+                                "{0:.2f}".format(cve["impactScore"]),
+                                cve["publishedOn"],
+                                cve["createdAt"],
+                                cve["link"],
+                                cve["summary"]
+                            ])
+                            f.flush()
 
                 except Exception as ex:
                     print(f"Not completing {clusterName} due to ERROR:{type(ex)=}:{ex=}.")

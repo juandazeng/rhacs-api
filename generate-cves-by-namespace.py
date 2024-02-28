@@ -9,7 +9,29 @@ from urllib.parse import urlencode
 from datetime import datetime
 
 # Constants
-CSV_HEADER = ["Cluster Name", "Environment", "Cluster Descriptor", "Namespace", "Total CVEs", "Fixable CVEs"]
+CSV_HEADER = [
+    "Cluster Name",
+    "Environment",
+    "Cluster Descriptor",
+    "Namespace",
+    "CVE",
+    "Fixable",
+    "Severity",
+    "CVSS",
+    "Env. Impact",
+    "Impact Score",
+    "Published On",
+    "Discovered On",
+    "Link",
+    "Summary"
+]
+VULNERABILITY_SEVERITY = {
+    "CRITICAL_VULNERABILITY_SEVERITY": "Critical",
+    "IMPORTANT_VULNERABILITY_SEVERITY": "Important",
+    "MODERATE_VULNERABILITY_SEVERITY": "Moderate",
+    "LOW_VULNERABILITY_SEVERITY": "Low",
+    "UNKNOWN_VULNERABILITY_SEVERITY": "Unknown"
+}
 IS_INCLUDE_OPENSHIFT_NAMESPACE = False
 
 # The cluster regex matches the following:
@@ -23,18 +45,20 @@ GRAPHQL_REQUEST_TEMPLATE = Template("""
 {
   "operationName": "${operationName}",
   "variables": {
-    "query": "cluster:${clusterName}",
+    "id": "${namespaceId}",
+    "query": "",
     "policyQuery": "Category:Vulnerability Management",
+    "scopeQuery": "CLUSTER ID:${clusterId}",
     "pagination": {
       "offset": 0,
       "limit": 0,
       "sortOption": {
-        "field": "Namespace Risk Priority",
-        "reversed": false
+        "field": "CVSS",
+        "reversed": true
       }
     }
   },
-  "query": "query ${operationName}($$query: String, $$policyQuery: String, $$pagination: Pagination) {\n  results: namespaces(query: $$query, pagination: $$pagination) {\n    ...namespaceFields\n    unusedVarSink(query: $$policyQuery)\n    __typename\n  }\n  count: namespaceCount(query: $$query)\n}\n\nfragment namespaceFields on Namespace {\n  metadata {\n    id\n    clusterName\n    clusterId\n    priority\n    name\n    __typename\n  }\n  imageVulnerabilityCounter {\n    all {\n      fixable\n      total\n      __typename\n    }\n    critical {\n      fixable\n      total\n      __typename\n    }\n    important {\n      fixable\n      total\n      __typename\n    }\n    moderate {\n      fixable\n      total\n      __typename\n    }\n    low {\n      fixable\n      total\n      __typename\n    }\n    __typename\n  }\n  deploymentCount\n  imageCount(query: $$query)\n  policyStatusOnly(query: $$policyQuery)\n  latestViolation(query: $$policyQuery)\n  __typename\n}\n"
+  "query": "query ${operationName}($$id: ID!, $$pagination: Pagination, $$query: String, $$policyQuery: String, $$scopeQuery: String) {\n  result: namespace(id: $$id) {\n    metadata {\n      id\n      __typename\n    }\n    imageVulnerabilityCount(query: $$query)\n    imageVulnerabilities(query: $$query, pagination: $$pagination) {\n      ...imageCVEFields\n      __typename\n    }\n    unusedVarSink(query: $$policyQuery)\n    unusedVarSink(query: $$scopeQuery)\n    __typename\n  }\n}\n\nfragment imageCVEFields on ImageVulnerability {\n  createdAt\n  cve\n  cvss\n  discoveredAtImage\n  envImpact\n  fixedByVersion\n  id\n  impactScore\n  isFixable(query: $$scopeQuery)\n  lastModified\n  lastScanned\n  link\n  operatingSystem\n  publishedOn\n  scoreVersion\n  severity\n  summary\n  suppressActivation\n  suppressExpiry\n  suppressed\n  vulnerabilityState\n  componentCount: imageComponentCount\n  imageCount\n  deploymentCount\n  __typename\n}\n"
 }""")
 
 # Prepare for API calls
@@ -87,7 +111,7 @@ def main():
                 clusterEnvironment = ""
                 clusterDescriptor = ""
 
-                print(f"Inspecting {clusterName}...")
+                print(f"Inspecting namespaces in cluster:{clusterName}...")
 
                 # Try to parse cluster info
                 try:
@@ -101,44 +125,63 @@ def main():
                 except:
                     pass
 
-                try:
-                    operationName = "getNamespaces"
-                    graphQlRequest = GRAPHQL_REQUEST_TEMPLATE.substitute(
-                        operationName = operationName,
-                        clusterName = clusterName
-                    ).replace("\n", "")
+                responseJson = getJsonFromRhacsApi("/namespaces?query.query=clusterId:" + clusterId)
+                if responseJson is not None:
+                    namespaces = responseJson["namespaces"]
 
-                    responseJson = getJsonFromRhacsGraphQl(operationName, graphQlRequest)
-                    if responseJson is not None:
-                        namespaces = responseJson["data"]["results"]
+                    # Skip all openshift namespaces unless IS_INCLUDE_OPENSHIFT_NAMESPACE is True
+                    namespacesToBeInspected = namespaces if IS_INCLUDE_OPENSHIFT_NAMESPACE else [namespace for namespace in namespaces if not namespace["metadata"]["name"].startswith("openshift")] 
 
-                        # Skip all openshift namespaces unless IS_INCLUDE_OPENSHIFT_NAMESPACE is True
-                        namespacesToBeInspected = namespaces if IS_INCLUDE_OPENSHIFT_NAMESPACE else [namespace for namespace in namespaces if not namespace["metadata"]["name"].startswith("openshift")] 
+                    namespaceCount = len(namespacesToBeInspected)
+                    currentNamespaceIndex = 0
+                    for namespace in namespacesToBeInspected:
+                        namespaceId = namespace["metadata"]["id"]
+                        namespaceName = namespace["metadata"]["name"]
 
-                        namespaceCount = len(namespacesToBeInspected)
-                        currentNamespaceIndex = 0
-                        for namespace in namespacesToBeInspected:
-                            namespaceName = namespace["metadata"]["name"]
-                            cveInfo = namespace["imageVulnerabilityCounter"]["all"]
-                            cveCount = cveInfo["total"]
-                            fixableCveCount = cveInfo["fixable"]
+                        currentNamespaceIndex += 1
+                        print(f"{currentNamespaceIndex} of {namespaceCount} - Inspecting {clusterName}/{namespaceName}...")
 
-                            currentNamespaceIndex += 1
-                            print(f"{currentNamespaceIndex} of {namespaceCount} - Inspecting {clusterName}/{namespaceName}...")
+                        try:
+                            operationName = "getNamespaceIMAGE_CVE"
+                            graphQlRequest = GRAPHQL_REQUEST_TEMPLATE.substitute(
+                                operationName = operationName,
+                                clusterId = clusterId,
+                                namespaceId = namespaceId
+                            ).replace("\n", "")
 
-                            # Write the cve counts into the CSV file
-                            writer.writerow([
-                                clusterName,
-                                clusterEnvironment,
-                                clusterDescriptor,
-                                namespaceName,
-                                cveCount,
-                                fixableCveCount
-                            ])
-                            f.flush()
+                            responseJson = getJsonFromRhacsGraphQl(operationName, graphQlRequest)
+                            if responseJson is not None:
+                                cves = responseJson["data"]["result"]["imageVulnerabilities"]
 
-                except Exception as ex:
-                    print(f"Not completing {clusterName} due to ERROR:{type(ex)=}:{ex=}.")
+                                for cve in cves:
+                                    # Parse the severity
+                                    severity = ""
+                                    try:
+                                        severity = VULNERABILITY_SEVERITY[cve["severity"]]
+                                    except:
+                                        pass
+
+                                    # Write the cve details
+                                    writer.writerow([
+                                        clusterName,
+                                        clusterEnvironment,
+                                        clusterDescriptor,
+                                        namespaceName,
+                                        cve["cve"],
+                                        "Fixable" if cve["isFixable"] else "Not Fixable",
+                                        severity,
+                                        "{0:.1f}".format(cve["cvss"]),
+                                        "{0:.0f}%".format(cve["envImpact"]*100),
+                                        "{0:.2f}".format(cve["impactScore"]),
+                                        cve["publishedOn"],
+                                        cve["createdAt"],
+                                        cve["link"],
+                                        cve["summary"]
+                                    ])
+                                    f.flush()
+
+                        except Exception as ex:
+                            print(f"Not completing {clusterName}/{namespaceName} due to ERROR:{type(ex)=}:{ex=}.")
 
         print(f"Successfully generated {csvFileName}\n")
                     

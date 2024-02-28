@@ -1,3 +1,101 @@
-Cluster Name,Environment,Cluster Descriptor,Total CVEs,Fixable CVEs
-aap,cluster,,0,0
-production,,,4,4
+Cluster Name,Environment,Cluster Descriptor,CVE,Fixable,Severity,CVSS,Env. Impact,Impact Score,Published On,Discovered On,Link,Summary
+aap,cluster,,CVE-2024-0793,Not Fixable,Important,7.7,100%,4.00,,2024-02-28T14:41:46.332421795Z,https://access.redhat.com/security/cve/CVE-2024-0793,DOCUMENTATION: A flaw was found in kube-controller-manager. This issue occurs when the initial application of a HPA config YAML lacking a .spec.behavior.scaleUp block causes a denial of service due to KCM pods going into restart churn.
+aap,cluster,,CVE-2023-45142,Not Fixable,Moderate,7.5,100%,3.60,,2024-02-28T14:41:46.332421795Z,https://access.redhat.com/security/cve/CVE-2023-45142,"DOCUMENTATION: A memory leak was found in the otelhttp handler of open-telemetry. This flaw allows a remote, unauthenticated attacker to exhaust the server's memory by sending many malicious requests, affecting the availability. 
+            STATEMENT: While no authentication is required, there are a significant number of non-default factors which prevent widespread exploitation of this flaw. For a service to be affected, all of the following must be true:
+* The go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp package must be in use
+* Configured a metrics pipeline which uses the otelhttp.NewHandler wrapper function
+* No filtering of unknown HTTP methods or user agents at a higher level (such as Content Delivery Network/Load Balancer/etc...)
+
+Due to the limited attack surface, Red Hat Product Security rates the impact as Moderate.
+            MITIGATION: As a workaround to stop being affected otelhttp.WithFilter() can be used.
+
+For convenience and safe usage of this library, it should by default mark with the label unknown non-standard HTTP methods and User agents to show that such requests were made but do not increase cardinality. In case someone wants to stay with the current behavior, library API should allow to enable it.
+
+The other possibility is to disable HTTP metrics instrumentation by passing otelhttp.WithMeterProvider option with noop.NewMeterProvider."
+production,,,RHSA-2023:3536,Fixable,Important,9.8,50%,5.90,2023-06-13T00:00:00Z,2024-02-26T09:16:31.253482255Z,https://access.redhat.com/errata/RHSA-2023:3536,"Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
+
+This advisory contains the RPM packages for Red Hat OpenShift Container Platform 4.13.3. See the following advisory for the container images for this release:
+
+https://access.redhat.com/errata/RHSA-2023:3537
+
+Security Fix(es):
+
+* flask: Possible disclosure of permanent session cookie due to missing Vary: Cookie header (CVE-2023-30861)
+
+For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+
+All OpenShift Container Platform 4.13 users are advised to upgrade to these updated packages and images when they are available in the appropriate release channel. To check for available updates, use the OpenShift CLI (oc) or web console. Instructions for upgrading a cluster are available at https://docs.openshift.com/container-platform/4.13/updating/updating-cluster-cli.html"
+production,,,RHSA-2023:4093,Fixable,Important,9.8,50%,5.90,2023-07-20T00:00:00Z,2024-02-26T07:18:16.34058646Z,https://access.redhat.com/errata/RHSA-2023:4093,"Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
+
+This advisory contains the RPM packages for Red Hat OpenShift Container Platform 4.13.5. See the following advisory for the container images for this release:
+
+https://access.redhat.com/errata/RHSA-2023:4091
+
+Security Fix(es):
+
+* openshift: OCP & FIPS mode (CVE-2023-3089)
+
+* kube-apiserver: PrivEsc (CVE-2023-1260)
+
+* golang: net/http, net/textproto: denial of service from excessive memory allocation (CVE-2023-24534)
+
+* golang: net/http, net/textproto, mime/multipart: denial of service from excessive resource consumption (CVE-2023-24536)
+
+* golang: go/parser: Infinite loop in parsing (CVE-2023-24537)
+
+* golang: html/template: backticks not treated as string delimiters (CVE-2023-24538)
+
+* golang: html/template: improper sanitization of CSS values (CVE-2023-24539)
+
+* runc: volume mount race condition (regression of CVE-2019-19921) (CVE-2023-27561)
+
+* golang: html/template: improper handling of empty HTML attributes (CVE-2023-29400)
+
+For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+
+All OpenShift Container Platform 4.13 users are advised to upgrade to these updated packages and images when they are available in the appropriate release channel. To check for available updates, use the OpenShift CLI (oc) or web console. Instructions for upgrading a cluster are available at https://docs.openshift.com/container-platform/4.13/updating/updating-cluster-cli.html"
+production,,,RHSA-2023:3366,Fixable,Important,8.1,50%,5.90,2023-06-07T00:00:00Z,2024-02-26T07:18:16.34058646Z,https://access.redhat.com/errata/RHSA-2023:3366,"Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
+
+This advisory contains the RPM packages for Red Hat OpenShift Container Platform 4.13.2. See the following advisory for the container images for this release:
+
+https://access.redhat.com/errata/RHSA-2023:3367
+
+Security Fix(es):
+
+* golang: html/template: improper handling of JavaScript whitespace (CVE-2023-24540)
+
+* golang: crash in a golang.org/x/crypto/ssh server (CVE-2022-27191)
+
+* golang: path/filepath: path-filepath filepath.Clean path traversal (CVE-2022-41722)
+
+* golang: crypto/tls: large handshake records may cause panics (CVE-2022-41724)
+
+For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+
+All OpenShift Container Platform 4.13 users are advised to upgrade to these updated packages and images when they are available in the appropriate release channel. To check for available updates, use the OpenShift CLI (oc) or web console. Instructions for upgrading a cluster are available at https://docs.openshift.com/container-platform/4.13/updating/updating-cluster-cli.html"
+production,,,CVE-2024-0793,Not Fixable,Important,7.7,100%,4.00,,2024-02-28T14:41:46.332421795Z,https://access.redhat.com/security/cve/CVE-2024-0793,DOCUMENTATION: A flaw was found in kube-controller-manager. This issue occurs when the initial application of a HPA config YAML lacking a .spec.behavior.scaleUp block causes a denial of service due to KCM pods going into restart churn.
+production,,,CVE-2023-45142,Not Fixable,Moderate,7.5,100%,3.60,,2024-02-28T14:41:46.332421795Z,https://access.redhat.com/security/cve/CVE-2023-45142,"DOCUMENTATION: A memory leak was found in the otelhttp handler of open-telemetry. This flaw allows a remote, unauthenticated attacker to exhaust the server's memory by sending many malicious requests, affecting the availability. 
+            STATEMENT: While no authentication is required, there are a significant number of non-default factors which prevent widespread exploitation of this flaw. For a service to be affected, all of the following must be true:
+* The go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp package must be in use
+* Configured a metrics pipeline which uses the otelhttp.NewHandler wrapper function
+* No filtering of unknown HTTP methods or user agents at a higher level (such as Content Delivery Network/Load Balancer/etc...)
+
+Due to the limited attack surface, Red Hat Product Security rates the impact as Moderate.
+            MITIGATION: As a workaround to stop being affected otelhttp.WithFilter() can be used.
+
+For convenience and safe usage of this library, it should by default mark with the label unknown non-standard HTTP methods and User agents to show that such requests were made but do not increase cardinality. In case someone wants to stay with the current behavior, library API should allow to enable it.
+
+The other possibility is to disable HTTP metrics instrumentation by passing otelhttp.WithMeterProvider option with noop.NewMeterProvider."
+production,,,RHSA-2023:5675,Fixable,Important,7.5,50%,3.60,2023-10-17T00:00:00Z,2024-02-26T07:18:16.34058646Z,https://access.redhat.com/errata/RHSA-2023:5675,"Red Hat OpenShift Container Platform is Red Hat's cloud computing Kubernetes application platform solution designed for on-premise or private cloud deployments.
+
+This advisory contains the RPM packages for Red Hat OpenShift Container Platform 4.13.17. See the following advisory for the container images for this release:
+
+https://access.redhat.com/errata/RHSA-2023:5672
+
+Security Fix(es):
+
+* golang: net/http, x/net/http2: rapid stream resets can cause excessive work (CVE-2023-44487) (CVE-2023-39325)
+
+For more details about the security issue(s), including the impact, a CVSS score, acknowledgments, and other related information, refer to the CVE page(s) listed in the References section.
+
+All OpenShift Container Platform 4.13 users are advised to upgrade to these updated packages and images when they are available in the appropriate release channel. To check for available updates, use the OpenShift CLI (oc) or web console. Instructions for upgrading a cluster are available at https://docs.openshift.com/container-platform/4.13/updating/updating-cluster-cli.html"

@@ -9,7 +9,29 @@ from urllib.parse import urlencode
 from datetime import datetime
 
 # Constants
-CSV_HEADER = ["Cluster Name", "Environment", "Cluster Descriptor", "Node Name", "Total CVEs", "Fixable CVEs"]
+CSV_HEADER = [
+    "Cluster Name",
+    "Environment",
+    "Cluster Descriptor",
+    "Node Name",
+    "CVE",
+    "Fixable",
+    "Severity",
+    "CVSS",
+    "Env. Impact",
+    "Impact Score",
+    "Published On",
+    "Discovered On",
+    "Link",
+    "Summary"
+]
+VULNERABILITY_SEVERITY = {
+    "CRITICAL_VULNERABILITY_SEVERITY": "Critical",
+    "IMPORTANT_VULNERABILITY_SEVERITY": "Important",
+    "MODERATE_VULNERABILITY_SEVERITY": "Moderate",
+    "LOW_VULNERABILITY_SEVERITY": "Low",
+    "UNKNOWN_VULNERABILITY_SEVERITY": "Unknown"
+}
 
 # The cluster regex matches the following:
 # ocps4 - uat_abc_def123 <-- cluster name: ocps4, environment: uat, cluster descriptor: abc_def123
@@ -22,7 +44,8 @@ GRAPHQL_REQUEST_TEMPLATE = Template("""
 {
   "operationName": "${operationName}",
   "variables": {
-    "id": "${clusterId}",
+    "id": "${nodeId}",
+    "query": "",
     "policyQuery": "Category:Vulnerability Management",
     "scopeQuery": "CLUSTER ID: ${clusterId}",
     "pagination": {
@@ -34,7 +57,7 @@ GRAPHQL_REQUEST_TEMPLATE = Template("""
       }
     }
   },
-  "query": "query ${operationName}($$id: ID!, $$pagination: Pagination, $$query: String, $$policyQuery: String, $$scopeQuery: String) {\n  result: cluster(id: $$id) {\n    id\n    clusterVulnerabilityCount(query: $$query)\n    clusterVulnerabilities(query: $$query, pagination: $$pagination) {\n      ...clusterCVEFields\n      __typename\n    }\n    unusedVarSink(query: $$policyQuery)\n    unusedVarSink(query: $$scopeQuery)\n    __typename\n  }\n}\n\nfragment clusterCVEFields on ClusterVulnerability {\n  clusterCount(query: $$query)\n  createdAt\n  cve\n  cvss\n  envImpact\n  fixedByVersion\n  id\n  impactScore\n  isFixable(query: $$scopeQuery)\n  lastModified\n  lastScanned\n  link\n  publishedOn\n  scoreVersion\n  severity\n  summary\n  suppressActivation\n  suppressExpiry\n  suppressed\n  vulnerabilityType\n  vulnerabilityTypes\n  __typename\n}\n"
+  "query": "query ${operationName}($$id: ID!, $$pagination: Pagination, $$query: String, $$policyQuery: String, $$scopeQuery: String) {\n  result: node(id: $$id) {\n    id\n    nodeVulnerabilityCount(query: $$query)\n    nodeVulnerabilities(query: $$query, pagination: $$pagination) {\n      ...nodeCVEFields\n      __typename\n    }\n    unusedVarSink(query: $$policyQuery)\n    unusedVarSink(query: $$scopeQuery)\n    __typename\n  }\n}\n\nfragment nodeCVEFields on NodeVulnerability {\n  createdAt\n  cve\n  cvss\n  envImpact\n  fixedByVersion\n  id\n  impactScore\n  isFixable(query: $$scopeQuery)\n  lastModified\n  lastScanned\n  link\n  publishedOn\n  scoreVersion\n  severity\n  summary\n  suppressActivation\n  suppressExpiry\n  suppressed\n  componentCount: nodeComponentCount\n  nodeCount\n  operatingSystem\n  __typename\n}\n"
 }""")
 
 # Prepare for API calls
@@ -87,7 +110,7 @@ def main():
                 clusterEnvironment = ""
                 clusterDescriptor = ""
 
-                print(f"Inspecting {clusterName}...")
+                print(f"Inspecting nodes in cluster:{clusterName}...")
 
                 # Try to parse cluster info
                 try:
@@ -101,30 +124,59 @@ def main():
                 except:
                     pass
 
-
                 # Process all nodes in this cluster
                 responseJson = getJsonFromRhacsApi("/nodes/" + clusterId)
                 nodes = responseJson["nodes"]
                 nodeCount = len(nodes)
                 currentNodeIndex = 0
                 for node in nodes:
+                    nodeId = node["id"]
                     nodeName = node["name"]
-                    cveCount = node["cves"]
-                    fixableCveCount = node["fixableCves"]
-
+ 
                     currentNodeIndex += 1
                     print(f"{currentNodeIndex} of {nodeCount} - Inspecting {clusterName}/{nodeName}...")
 
-                    # Write the cve counts into the CSV file
-                    writer.writerow([
-                        clusterName,
-                        clusterEnvironment,
-                        clusterDescriptor,
-                        nodeName,
-                        cveCount,
-                        fixableCveCount
-                    ])
-                    f.flush()
+                    try:
+                        operationName = "getNodeNODE_CVE"
+                        graphQlRequest = GRAPHQL_REQUEST_TEMPLATE.substitute(
+                            operationName = operationName,
+                            clusterId = clusterId,
+                            nodeId = nodeId
+                        ).replace("\n", "")
+
+                        responseJson = getJsonFromRhacsGraphQl(operationName, graphQlRequest)
+                        if responseJson is not None:
+                            cves = responseJson["data"]["result"]["nodeVulnerabilities"]
+
+                            for cve in cves:
+                                # Parse the severity
+                                severity = ""
+                                try:
+                                    severity = VULNERABILITY_SEVERITY[cve["severity"]]
+                                except:
+                                    pass
+
+                                # Write the cve details
+                                writer.writerow([
+                                    clusterName,
+                                    clusterEnvironment,
+                                    clusterDescriptor,
+                                    nodeName,
+                                    cve["cve"],
+                                    "Fixable" if cve["isFixable"] else "Not Fixable",
+                                    severity,
+                                    "{0:.1f}".format(cve["cvss"]),
+                                    "{0:.0f}%".format(cve["envImpact"]*100),
+                                    "{0:.2f}".format(cve["impactScore"]),
+                                    cve["publishedOn"],
+                                    cve["createdAt"],
+                                    cve["link"],
+                                    cve["summary"]
+                                ])
+                                f.flush()
+
+                    except Exception as ex:
+                        print(f"Not completing {clusterName}/{nodeName} due to ERROR:{type(ex)=}:{ex=}.")
 
         print(f"Successfully generated {csvFileName}\n")
                     
