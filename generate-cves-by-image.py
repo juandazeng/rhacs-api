@@ -234,7 +234,6 @@ def main():
             except Exception as ex:
                 print(f"Not completing {clusterName}/{namespace}/{deploymentName} due to ERROR:{type(ex)=}:{ex=}.")
 
-
     # Create the CSV file
     with open(csvFileName, "w", newline="") as f:
         writer = csv.writer(f, dialect="excel")
