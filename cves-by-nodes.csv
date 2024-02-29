@@ -1,6 +1,0 @@
-Cluster Name,Environment,Cluster Descriptor,Node Name,Total CVEs,Fixable CVEs
-aap,cluster,,ip-10-0-225-175.us-east-2.compute.internal,61,14
-production,,,ip-10-0-158-188.us-east-2.compute.internal,105,58
-production,,,ip-10-0-150-64.us-east-2.compute.internal,105,58
-production,,,ip-10-0-238-87.us-east-2.compute.internal,105,58
-production,,,ip-10-0-204-100.us-east-2.compute.internal,104,57
