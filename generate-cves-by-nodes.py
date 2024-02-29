@@ -13,13 +13,13 @@ CSV_HEADER = [
     "Cluster Name",
     "Environment",
     "Cluster Descriptor",
-    "Node Name",
     "CVE",
     "Fixable",
     "Severity",
     "CVSS",
     "Env. Impact",
     "Impact Score",
+    "Nodes",
     "Published On",
     "Discovered On",
     "Link",
@@ -69,6 +69,18 @@ requestContext = ssl.create_default_context()
 requestContext.check_hostname = False
 requestContext.verify_mode = ssl.CERT_NONE
 
+class ClusterDetail:
+    def __init__(self) -> None:
+        self.clusterId = ""
+        self.clusterName = ""
+        self.clusterEnvironment = ""
+        self.clusterDescriptor = ""
+        self.cveDetails = {}
+    
+class CveDetail:
+    def __init__(self) -> None:
+        self.cve = {}
+        self.nodes = []
 
 # Main function
 def main():
@@ -94,6 +106,10 @@ def main():
         "Content-Length": 0,
         "Accept": "application/json"
     }
+
+    # This will contain the list of CVEs
+    # Grouped by cluster, so some CVEs may appear in multiple clusters
+    cvesByCluster = {}
 
     responseJson = getJsonFromRhacsApi("/clusters")
     if responseJson is not None:
@@ -124,6 +140,14 @@ def main():
                 except:
                     pass
 
+                cvesByCluster[clusterId] = ClusterDetail()
+                cvesByCluster[clusterId].clusterId = clusterId
+                cvesByCluster[clusterId].clusterName = clusterName
+                cvesByCluster[clusterId].clusterEnvironment = clusterEnvironment
+                cvesByCluster[clusterId].clusterDescriptor = clusterDescriptor
+            
+                currentClusterDetail = cvesByCluster[clusterId]
+
                 # Process all nodes in this cluster
                 responseJson = getJsonFromRhacsApi("/nodes/" + clusterId)
                 nodes = responseJson["nodes"]
@@ -149,34 +173,58 @@ def main():
                             cves = responseJson["data"]["result"]["nodeVulnerabilities"]
 
                             for cve in cves:
-                                # Parse the severity
-                                severity = ""
-                                try:
-                                    severity = VULNERABILITY_SEVERITY[cve["severity"]]
-                                except:
-                                    pass
+                                # Add to the list of CVEs if it has not been added
+                                cveId = cve["cve"]
+                                if cveId not in currentClusterDetail.cveDetails:
+                                    currentClusterDetail.cveDetails[cveId] = CveDetail()
 
-                                # Write the cve details
-                                writer.writerow([
-                                    clusterName,
-                                    clusterEnvironment,
-                                    clusterDescriptor,
-                                    nodeName,
-                                    cve["cve"],
-                                    "Fixable" if cve["isFixable"] else "Not Fixable",
-                                    severity,
-                                    "{0:.1f}".format(cve["cvss"]),
-                                    "{0:.0f}%".format(cve["envImpact"]*100),
-                                    "{0:.2f}".format(cve["impactScore"]),
-                                    cve["publishedOn"],
-                                    cve["createdAt"],
-                                    cve["link"],
-                                    cve["summary"]
-                                ])
-                                f.flush()
+                                currentCveDetail = currentClusterDetail.cveDetails[cveId]
+                                
+                                currentCveDetail.cve = cve
+                                if nodeName not in currentCveDetail.nodes:
+                                    currentCveDetail.nodes.append(nodeName)
 
                     except Exception as ex:
                         print(f"Not completing {clusterName}/{nodeName} due to ERROR:{type(ex)=}:{ex=}.")
+
+        # Create the CSV file
+        with open(csvFileName, "w", newline="") as f:
+            writer = csv.writer(f, dialect="excel")
+            writer.writerow(CSV_HEADER)
+
+            # Sort the CVEs by environment, cluster name, and CVSS score
+            sortedByClusterEnvironmentAndName = sorted(cvesByCluster,  key = lambda clusterId : (cvesByCluster[clusterId].clusterEnvironment, cvesByCluster[clusterId].clusterName))
+            for clusterId in sortedByClusterEnvironmentAndName:
+                clusterDetail = cvesByCluster[clusterId]
+
+                for cveId in clusterDetail.cveDetails:
+                    cveDetail = clusterDetail.cveDetails[cveId]
+                    cveData = cveDetail.cve
+
+                    # Parse the severity
+                    severity = ""
+                    try:
+                        severity = VULNERABILITY_SEVERITY[cveData["severity"]]
+                    except:
+                        pass
+
+                    writer.writerow([
+                        clusterDetail.clusterName,
+                        clusterDetail.clusterEnvironment,
+                        clusterDetail.clusterDescriptor,
+                        cveId,
+                        "Fixable" if cveData["isFixable"] else "Not Fixable",
+                        severity,
+                        "{0:.1f}".format(cveData["cvss"]),
+                        "{0:.0f}%".format(cveData["envImpact"]*100),
+                        "{0:.2f}".format(cveData["impactScore"]),
+                        "\n".join(cveDetail.nodes),
+                        cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
+                        cveData["createdAt"],
+                        cveData["link"],
+                        cveData["summary"]
+                    ])
+                    f.flush()
 
         print(f"Successfully generated {csvFileName}\n")
                     

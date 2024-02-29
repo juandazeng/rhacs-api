@@ -144,6 +144,7 @@ def main():
                                 severity = VULNERABILITY_SEVERITY[cve["severity"]]
                             except:
                                 pass
+                            
                             # Write the cve details
                             writer.writerow([
                                 clusterName,
@@ -155,7 +156,7 @@ def main():
                                 "{0:.1f}".format(cve["cvss"]),
                                 "{0:.0f}%".format(cve["envImpact"]*100),
                                 "{0:.2f}".format(cve["impactScore"]),
-                                cve["publishedOn"],
+                                cve["publishedOn"] if cve["publishedOn"] is not None else "",
                                 cve["createdAt"],
                                 cve["link"],
                                 cve["summary"]

@@ -74,13 +74,19 @@ requestContext = ssl.create_default_context()
 requestContext.check_hostname = False
 requestContext.verify_mode = ssl.CERT_NONE
 
+class ClusterDetail:
+    def __init__(self) -> None:
+        self.clusterId = ""
+        self.clusterName = ""
+        self.clusterEnvironment = ""
+        self.clusterDescriptor = ""
+        self.cveDetails = {}
+    
 class CveDetail:
-    cve = {}
-    clusterName = ""
-    clusterEnvironment = ""
-    clusterDescriptor = ""
-    namespaces = []
-    images = []
+    def __init__(self) -> None:
+        self.cve = {}
+        self.namespaces = []
+        self.images = []
 
 # Main function
 def main():
@@ -106,7 +112,8 @@ def main():
     }
 
     # This will contain the list of CVEs
-    cves = {}
+    # Grouped by cluster, so some CVEs may appear in multiple clusters
+    cvesByCluster = {}
 
     responseJson = getJsonFromRhacsApi("/deployments")
     if responseJson is not None:
@@ -119,13 +126,14 @@ def main():
         deploymentCount = len(deploymentsToBeInspected)
         currentDeploymentIndex = 0
         for deployment in deploymentsToBeInspected:
-            clusterName = deployment["cluster"]
+            clusterId = deployment["clusterId"]
+            clusterNameRaw = deployment["cluster"]
             clusterEnvironment = ""
             clusterDescriptor = ""
 
             # Try to parse cluster info
             try:
-                regexResult = re.search(CLUSTER_INFO_REGEX, clusterName)
+                regexResult = re.search(CLUSTER_INFO_REGEX, clusterNameRaw)
                 if regexResult.group(1) is not None:
                     clusterName = regexResult.group(1)
                 if regexResult.group(2) is not None:
@@ -135,16 +143,22 @@ def main():
             except:
                 pass
 
+            # Initialise the CVE list object if it has not been initialised
+            if clusterId not in cvesByCluster:
+                cvesByCluster[clusterId] = ClusterDetail()
+                cvesByCluster[clusterId].clusterId = clusterId
+                cvesByCluster[clusterId].clusterName = clusterName
+                cvesByCluster[clusterId].clusterEnvironment = clusterEnvironment
+                cvesByCluster[clusterId].clusterDescriptor = clusterDescriptor
+            
+            currentClusterDetail = cvesByCluster[clusterId]
+
             namespace = deployment["namespace"]
             deploymentId = deployment["id"]
             deploymentName = deployment["name"]
 
             # Get the deployment detail
             currentDeploymentIndex += 1
-            # DEBUG: remove this
-            # if currentDeploymentIndex > 2:
-            #     break
-
             print(f"{currentDeploymentIndex} of {deploymentCount} - Inspecting {clusterName}/{namespace}/{deploymentName}...")
 
             try:
@@ -214,22 +228,20 @@ def main():
 
                         finally:
                             # Get the list of CVEs
-                            cves = {}
                             for component in responseJson["scan"]["components"]:
                                 for cve in component["vulns"]:
                                     # Add to the list of CVEs if it has not been added
                                     cveId = cve["cve"]
-                                    if cveId not in cves:
-                                        cves[cveId] = CveDetail()
+                                    if cveId not in currentClusterDetail.cveDetails:
+                                        currentClusterDetail.cveDetails[cveId] = CveDetail()
+
+                                    currentCveDetail = currentClusterDetail.cveDetails[cveId]
                                     
-                                    cves[cveId].cve = cve
-                                    cves[cveId].clusterName = clusterName
-                                    cves[cveId].clusterEnvironment = clusterEnvironment
-                                    cves[cveId].clusterDescriptor = clusterDescriptor
-                                    if namespace not in cves[cveId].namespaces:
-                                        cves[cveId].namespaces.append(namespace)
-                                    if imageFullName not in cves[cveId].images:
-                                        cves[cveId].images.append(imageFullName)
+                                    currentCveDetail.cve = cve
+                                    if namespace not in currentCveDetail.namespaces:
+                                        currentCveDetail.namespaces.append(namespace)
+                                    if imageFullName not in currentCveDetail.images:
+                                        currentCveDetail.images.append(imageFullName)
 
             except Exception as ex:
                 print(f"Not completing {clusterName}/{namespace}/{deploymentName} due to ERROR:{type(ex)=}:{ex=}.")
@@ -240,35 +252,38 @@ def main():
         writer.writerow(CSV_HEADER)
 
         # Sort the CVEs by environment, cluster name, and CVSS score
-        sortedByClusterEnvironmentAndName = sorted(cves, key = lambda cveId : (cves[cveId].clusterEnvironment, cves[cveId].clusterName, cves[cveId].cve["cvss"]))
-        for cveId in sortedByClusterEnvironmentAndName:
-            cve = cves[cveId]
-            cveDetails = cve.cve
+        sortedByClusterEnvironmentAndName = sorted(cvesByCluster,  key = lambda clusterId : (cvesByCluster[clusterId].clusterEnvironment, cvesByCluster[clusterId].clusterName))
+        for clusterId in sortedByClusterEnvironmentAndName:
+            clusterDetail = cvesByCluster[clusterId]
 
-            # Parse the severity
-            severity = ""
-            try:
-                severity = VULNERABILITY_SEVERITY[cveDetails["severity"]]
-            except:
-                pass
+            for cveId in clusterDetail.cveDetails:
+                cveDetail = clusterDetail.cveDetails[cveId]
+                cveData = cveDetail.cve
 
-            writer.writerow([
-                cve.clusterName,
-                cve.clusterEnvironment,
-                cve.clusterDescriptor,
-                cveDetails["cve"],
-                "Fixable" if "fixedBy" in cveDetails else "Not Fixable",
-                severity,
-                "{0:.1f}".format(cveDetails["cvss"]),
-                "{0:.2f}".format(cveDetails["cvssV3"]["impactScore"]) if cveDetails["cvssV3"] is not None else "0.00",
-                "\n".join(cve.namespaces),
-                "\n".join(cve.images),
-                cveDetails["publishedOn"] if cveDetails["publishedOn"] is not None else "",
-                cveDetails["firstSystemOccurrence"],
-                cveDetails["link"],
-                cveDetails["summary"]
-            ])
-            f.flush()
+                # Parse the severity
+                severity = ""
+                try:
+                    severity = VULNERABILITY_SEVERITY[cveData["severity"]]
+                except:
+                    pass
+
+                writer.writerow([
+                    clusterDetail.clusterName,
+                    clusterDetail.clusterEnvironment,
+                    clusterDetail.clusterDescriptor,
+                    cveId,
+                    "Fixable" if "fixedBy" in cveData else "Not Fixable",
+                    severity,
+                    "{0:.1f}".format(cveData["cvss"]),
+                    "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
+                    "\n".join(cveDetail.namespaces),
+                    "\n".join(cveDetail.images),
+                    cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
+                    cveData["firstSystemOccurrence"],
+                    cveData["link"],
+                    cveData["summary"]
+                ])
+                f.flush()
 
     print(f"Successfully generated {csvFileName}\n")
                     
