@@ -12,7 +12,20 @@ OS_ID_RHEL = "rhel"
 UBI_PREFIX = "ubi"
 UBI_REGEX = r"(?:https\://.+/([^/]+)/images/(\d[\d.]*)\-(\d[\d.]*))"
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S %z"
-CSV_HEADER = ["Cluster Name", "Environment", "Cluster Descriptor", "Namespace", "Deployment", "Image", "Created On", "OS", "UBI Name", "UBI Version", "UBI Release"]
+CSV_HEADER = [
+    "Cluster Name",
+    "Environment",
+    "Cluster Descriptor",
+    "Namespace",
+    "Application Code",
+    "Deployment",
+    "Image",
+    "Created On",
+    "OS",
+    "UBI Name",
+    "UBI Version",
+    "UBI Release"
+]
 IS_INCLUDE_OPENSHIFT_NAMESPACE = False
 
 # The cluster regex matches the following:
@@ -88,6 +101,9 @@ def main():
                 namespace = deployment["namespace"]
                 deploymentId = deployment["id"]
                 deploymentName = deployment["name"]
+
+                # Get the application code from the namespace (first 3 characters)
+                applicationCode = namespace[:3]
 
                 # Get the deployment detail
                 currentDeploymentIndex += 1
@@ -173,6 +189,7 @@ def main():
                                     clusterEnvironment,
                                     clusterDescriptor,
                                     namespace,
+                                    applicationCode,
                                     deploymentName,
                                     imageFullName,
                                     createdOn,

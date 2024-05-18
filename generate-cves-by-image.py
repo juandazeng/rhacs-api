@@ -23,6 +23,7 @@ CSV_HEADER = [
     "CVSS",
     "Impact Score",
     "Namespaces",
+    "Application Codes",
     "Images",
     "Published On",
     "Discovered On",
@@ -86,6 +87,7 @@ class CveDetail:
     def __init__(self) -> None:
         self.cve = {}
         self.namespaces = []
+        self.applicationCodes = []
         self.images = []
 
 # Main function
@@ -156,6 +158,9 @@ def main():
             namespace = deployment["namespace"]
             deploymentId = deployment["id"]
             deploymentName = deployment["name"]
+
+            # Get the application code from the namespace (first 3 characters)
+            applicationCode = namespace[:3]
 
             # Get the deployment detail
             currentDeploymentIndex += 1
@@ -240,6 +245,8 @@ def main():
                                     currentCveDetail.cve = cve
                                     if namespace not in currentCveDetail.namespaces:
                                         currentCveDetail.namespaces.append(namespace)
+                                    if applicationCode not in currentCveDetail.applicationCodes:
+                                        currentCveDetail.applicationCodes.append(applicationCode)
                                     if imageFullName not in currentCveDetail.images:
                                         currentCveDetail.images.append(imageFullName)
 
@@ -277,6 +284,7 @@ def main():
                     "{0:.1f}".format(cveData["cvss"]),
                     "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
                     "\n".join(cveDetail.namespaces),
+                    "\n".join(cveDetail.applicationCodes),
                     "\n".join(cveDetail.images),
                     cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
                     cveData["firstSystemOccurrence"],
