@@ -60,7 +60,7 @@ GRAPHQL_REQUEST_TEMPLATE = Template("""
 # Prepare for API calls
 rhacsCentralUrl = None
 rhacsApiToken = None
-csvFileName = None
+outputFileName = None
 authorizationHeader = None
 requestContext = ssl.create_default_context()
 requestContext.check_hostname = False
@@ -70,19 +70,21 @@ requestContext.verify_mode = ssl.CERT_NONE
 # Main function
 def main():
     # We will modify these global variables
-    global rhacsCentralUrl, rhacsApiToken, csvFileName, apiHeader
+    global rhacsCentralUrl, rhacsApiToken, outputFileName, apiHeader
     
     # Initialize arguments parser
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-u", "--url", help="RHACS CENTRAL URL, e.g. https://central-stackrox.apps.myocpcluster.com", required=True)
     parser.add_argument("-t", "--token", help="RHACS API token", required=True)
-    parser.add_argument("-o", "--output", help="Output CSV file name", required=True)
+    parser.add_argument("-o", "--output", help="Output file name", required=True)
+    parser.add_argument("-f", "--format", help="Output format (either csv or json)", choices=["csv", "json"], default="csv")
     arguments = parser.parse_args()
     
     rhacsCentralUrl = arguments.url
     rhacsApiToken = arguments.token
-    csvFileName = arguments.output
+    outputFileName = arguments.output
+    outputFormat = arguments.format
 
     # Prepare for API calls
     apiHeader = {
@@ -95,9 +97,11 @@ def main():
     responseJson = getJsonFromRhacsApi("/clusters")
     if responseJson is not None:
         # Create the CSV file
-        with open(csvFileName, "w", newline="") as f:
-            writer = csv.writer(f, dialect="excel")
-            writer.writerow(CSV_HEADER)
+        with open(outputFileName, "w", newline="") as f:
+            writer = None
+            if (outputFormat == "csv"):
+                writer = csv.writer(f, dialect="excel")
+                writer.writerow(CSV_HEADER)
 
             # Process all clusters
             clusters = responseJson["clusters"]
@@ -146,27 +150,31 @@ def main():
                                 pass
                             
                             # Write the cve details
-                            writer.writerow([
-                                clusterName,
-                                clusterEnvironment,
-                                clusterDescriptor,
-                                cve["cve"],
-                                "Fixable" if cve["isFixable"] else "Not Fixable",
-                                severity,
-                                "{0:.1f}".format(cve["cvss"]),
-                                "{0:.0f}%".format(cve["envImpact"]*100),
-                                "{0:.2f}".format(cve["impactScore"]),
-                                cve["publishedOn"] if cve["publishedOn"] is not None else "",
-                                cve["createdAt"],
-                                cve["link"],
-                                cve["summary"]
-                            ])
+                            outputRow = [
+                                    clusterName,
+                                    clusterEnvironment,
+                                    clusterDescriptor,
+                                    cve["cve"],
+                                    "Fixable" if cve["isFixable"] else "Not Fixable",
+                                    severity,
+                                    "{0:.1f}".format(cve["cvss"]),
+                                    "{0:.0f}%".format(cve["envImpact"]*100),
+                                    "{0:.2f}".format(cve["impactScore"]),
+                                    cve["publishedOn"] if cve["publishedOn"] is not None else "",
+                                    cve["createdAt"],
+                                    cve["link"],
+                                    cve["summary"]
+                                ]
+                            if outputFormat == "csv":
+                                writer.writerow(outputRow)
+                            elif outputFormat == "json":
+                                json.dump(outputRow, f)
                             f.flush()
 
                 except Exception as ex:
                     print(f"Not completing {clusterName} due to ERROR:{type(ex)=}:{ex=}.")
 
-        print(f"Successfully generated {csvFileName}\n")
+        print(f"Successfully generated {outputFileName}\n")
                     
 def getJsonFromRhacsApi(requestPath):
     url=rhacsCentralUrl + "/v1" + requestPath

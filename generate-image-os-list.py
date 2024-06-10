@@ -37,7 +37,7 @@ CLUSTER_INFO_REGEX = r"([^\W_]+)(?:[\W_]+([^\W_]+)(?:[\W_]+(.*))?)?$"
 # Prepare for API calls
 rhacsCentralUrl = None
 rhacsApiToken = None
-csvFileName = None
+outputFileName = None
 authorizationHeader = None
 requestContext = ssl.create_default_context()
 requestContext.check_hostname = False
@@ -46,7 +46,7 @@ requestContext.verify_mode = ssl.CERT_NONE
 # Main function
 def main():
     # We will modify these global variables
-    global rhacsCentralUrl, rhacsApiToken, csvFileName, authorizationHeader
+    global rhacsCentralUrl, rhacsApiToken, outputFileName, authorizationHeader
     
     # Initialize arguments parser
     parser = argparse.ArgumentParser()
@@ -54,11 +54,13 @@ def main():
     parser.add_argument("-u", "--url", help="RHACS Central URL, e.g. https://central-stackrox.apps.myocpcluster.com", required=True)
     parser.add_argument("-t", "--token", help="RHACS API token", required=True)
     parser.add_argument("-o", "--output", help="Output CSV file name", required=True)
+    parser.add_argument("-f", "--format", help="Output format (either csv or json)", choices=["csv", "json"], default="csv")
     arguments = parser.parse_args()
     
     rhacsCentralUrl = arguments.url
     rhacsApiToken = arguments.token
-    csvFileName = arguments.output
+    outputFileName = arguments.output
+    outputFormat = arguments.format
 
     # Prepare for API calls
     authorizationHeader = {
@@ -69,9 +71,11 @@ def main():
     responseJson = getJsonFromRhacsApi("/deployments")
     if responseJson is not None:
         # Create the CSV file
-        with open(csvFileName, "w", newline="") as f:
-            writer = csv.writer(f, dialect="excel")
-            writer.writerow(CSV_HEADER)
+        with open(outputFileName, "w", newline="") as f:
+            writer = None
+            if (outputFormat == "csv"):
+                writer = csv.writer(f, dialect="excel")
+                writer.writerow(CSV_HEADER)
 
             # Process all deployments across all clusters
             deployments = responseJson["deployments"]
@@ -183,8 +187,8 @@ def main():
                                 print(f"Image:{imageFullName} has the following ERROR:{type(ex)=}:{ex=}.")
 
                             finally:
-                                # Write the image detail into the CSV file
-                                writer.writerow([
+                                # Write the image detail into the file
+                                outputRow = [
                                     clusterName,
                                     clusterEnvironment,
                                     clusterDescriptor,
@@ -197,13 +201,17 @@ def main():
                                     ubiName,
                                     ubiVersion,
                                     ubiRelease
-                                ])
+                                ]
+                                if outputFormat == "csv":
+                                    writer.writerow(outputRow)
+                                elif outputFormat == "json":
+                                    json.dump(outputRow, f)
                                 f.flush()
 
                 except Exception as ex:
                     print(f"Not completing {clusterName}/{namespace}/{deploymentName} due to ERROR:{type(ex)=}:{ex=}.")
 
-        print(f"Successfully generated {csvFileName}\n")
+        print(f"Successfully generated {outputFileName}\n")
                     
 def getJsonFromRhacsApi(requestPath):
     url=rhacsCentralUrl + "/v1" + requestPath
