@@ -256,7 +256,7 @@ def main():
                 print(f"Not completing {clusterName}/{namespace}/{deploymentName} due to ERROR:{type(ex)=}:{ex=}.")
 
     # Create the CSV file
-    with open(outputFileName, "w", newline="") as f:
+    with open(outputFileName, "w", newline="", encoding="utf-8") as f:
         writer = None
         if (outputFormat == "csv"):
             writer = csv.writer(f, dialect="excel")
@@ -278,27 +278,44 @@ def main():
                 except:
                     pass
 
-                outputRow = [
-                    clusterDetail.clusterName,
-                    clusterDetail.clusterEnvironment,
-                    clusterDetail.clusterDescriptor,
-                    cveId,
-                    "Fixable" if "fixedBy" in cveData else "Not Fixable",
-                    severity,
-                    "{0:.1f}".format(cveData["cvss"]),
-                    "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
-                    "\n".join(cveDetail.namespaces),
-                    "\n".join(cveDetail.applicationCodes),
-                    "\n".join(cveDetail.images),
-                    cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
-                    cveData["firstSystemOccurrence"],
-                    cveData["link"],
-                    cveData["summary"]
-                ]
                 if outputFormat == "csv":
+                    outputRow = [
+                        clusterDetail.clusterName,
+                        clusterDetail.clusterEnvironment,
+                        clusterDetail.clusterDescriptor,
+                        cveId,
+                        "Fixable" if "fixedBy" in cveData else "Not Fixable",
+                        severity,
+                        "{0:.1f}".format(cveData["cvss"]),
+                        "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
+                        "\n".join(cveDetail.namespaces),
+                        "\n".join(cveDetail.applicationCodes),
+                        "\n".join(cveDetail.images),
+                        cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
+                        cveData["firstSystemOccurrence"],
+                        cveData["link"],
+                        cveData["summary"]
+                    ]
                     writer.writerow(outputRow)
                 elif outputFormat == "json":
-                    json.dump(outputRow, f)
+                    outputRow = {
+                        "clusterName": clusterDetail.clusterName,
+                        "clusterEnvironment": clusterDetail.clusterEnvironment,
+                        "clusterDescriptor": clusterDetail.clusterDescriptor,
+                        "cve": cveId,
+                        "fixable": "Fixable" if "fixedBy" in cveData else "Not Fixable",
+                        "severity": severity,
+                        "cvss": "{0:.1f}".format(cveData["cvss"]),
+                        "impactScore": "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
+                        "namespaces": "\n".join(cveDetail.namespaces),
+                        "applicationCodes": "\n".join(cveDetail.applicationCodes),
+                        "images": "\n".join(cveDetail.images),
+                        "publishedOn": cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
+                        "discoveredOn": cveData["firstSystemOccurrence"],
+                        "link": cveData["link"],
+                        "summary": cveData["summary"]
+                    }
+                    json.dump(outputRow, f, ensure_ascii=False)
                 f.flush()
 
     print(f"Successfully generated {outputFileName}\n")

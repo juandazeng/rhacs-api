@@ -97,7 +97,7 @@ def main():
     responseJson = getJsonFromRhacsApi("/clusters")
     if responseJson is not None:
         # Create the CSV file
-        with open(outputFileName, "w", newline="") as f:
+        with open(outputFileName, "w", newline="", encoding="utf-8") as f:
             writer = None
             if (outputFormat == "csv"):
                 writer = csv.writer(f, dialect="excel")
@@ -150,25 +150,40 @@ def main():
                                 pass
                             
                             # Write the cve details
-                            outputRow = [
-                                    clusterName,
-                                    clusterEnvironment,
-                                    clusterDescriptor,
-                                    cve["cve"],
-                                    "Fixable" if cve["isFixable"] else "Not Fixable",
-                                    severity,
-                                    "{0:.1f}".format(cve["cvss"]),
-                                    "{0:.0f}%".format(cve["envImpact"]*100),
-                                    "{0:.2f}".format(cve["impactScore"]),
-                                    cve["publishedOn"] if cve["publishedOn"] is not None else "",
-                                    cve["createdAt"],
-                                    cve["link"],
-                                    cve["summary"]
-                                ]
                             if outputFormat == "csv":
+                                outputRow = [
+                                        clusterName,
+                                        clusterEnvironment,
+                                        clusterDescriptor,
+                                        cve["cve"],
+                                        "Fixable" if cve["isFixable"] else "Not Fixable",
+                                        severity,
+                                        "{0:.1f}".format(cve["cvss"]),
+                                        "{0:.0f}%".format(cve["envImpact"]*100),
+                                        "{0:.2f}".format(cve["impactScore"]),
+                                        cve["publishedOn"] if cve["publishedOn"] is not None else "",
+                                        cve["createdAt"],
+                                        cve["link"],
+                                        cve["summary"]
+                                    ]
                                 writer.writerow(outputRow)
                             elif outputFormat == "json":
-                                json.dump(outputRow, f)
+                                outputRow = {
+                                    "clusterName": clusterName,
+                                    "clusterEnvironment": clusterEnvironment,
+                                    "clusterDescriptor": clusterDescriptor,
+                                    "cve": cve["cve"],
+                                    "fixable": "Fixable" if cve["isFixable"] else "Not Fixable",
+                                    "severity": severity,
+                                    "cvss": "{0:.1f}".format(cve["cvss"]),
+                                    "envImpact": "{0:.0f}%".format(cve["envImpact"]*100),
+                                    "impactScore": "{0:.2f}".format(cve["impactScore"]),
+                                    "publishedOn": cve["publishedOn"] if cve["publishedOn"] is not None else "",
+                                    "createdAt": cve["createdAt"],
+                                    "link": cve["link"],
+                                    "summary": cve["summary"]
+                                }
+                                json.dump(outputRow, f, ensure_ascii=False)
                             f.flush()
 
                 except Exception as ex:

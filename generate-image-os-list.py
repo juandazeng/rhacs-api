@@ -71,7 +71,7 @@ def main():
     responseJson = getJsonFromRhacsApi("/deployments")
     if responseJson is not None:
         # Create the CSV file
-        with open(outputFileName, "w", newline="") as f:
+        with open(outputFileName, "w", newline="", encoding="utf-8") as f:
             writer = None
             if (outputFormat == "csv"):
                 writer = csv.writer(f, dialect="excel")
@@ -188,24 +188,38 @@ def main():
 
                             finally:
                                 # Write the image detail into the file
-                                outputRow = [
-                                    clusterName,
-                                    clusterEnvironment,
-                                    clusterDescriptor,
-                                    namespace,
-                                    applicationCode,
-                                    deploymentName,
-                                    imageFullName,
-                                    createdOn,
-                                    os,
-                                    ubiName,
-                                    ubiVersion,
-                                    ubiRelease
-                                ]
                                 if outputFormat == "csv":
+                                    outputRow = [
+                                        clusterName,
+                                        clusterEnvironment,
+                                        clusterDescriptor,
+                                        namespace,
+                                        applicationCode,
+                                        deploymentName,
+                                        imageFullName,
+                                        createdOn,
+                                        os,
+                                        ubiName,
+                                        ubiVersion,
+                                        ubiRelease
+                                    ]
                                     writer.writerow(outputRow)
                                 elif outputFormat == "json":
-                                    json.dump(outputRow, f)
+                                    outputRow = {
+                                        "clusterName": clusterName,
+                                        "clusterEnvironment": clusterEnvironment,
+                                        "clusterDescriptor": clusterDescriptor,
+                                        "namespace": namespace,
+                                        "applicationCode": applicationCode,
+                                        "deploymentName": deploymentName,
+                                        "imageFullName": imageFullName,
+                                        "createdOn": createdOn,
+                                        "os": os,
+                                        "ubiName": ubiName,
+                                        "ubiVersion": ubiVersion,
+                                        "ubiRelease": ubiRelease
+                                    }
+                                    json.dump(outputRow, f, ensure_ascii=False)
                                 f.flush()
 
                 except Exception as ex:
