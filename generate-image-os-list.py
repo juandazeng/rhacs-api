@@ -68,7 +68,7 @@ def main():
         "Accept": "application/json"
     }
 
-    responseJson = getJsonFromRhacsApi("/deployments")
+    responseJson = getJsonFromRhacsExportApi("/deployments")
     if responseJson is not None:
         # Create the CSV file
         with open(outputFileName, "w", newline="", encoding="utf-8") as f:
@@ -78,15 +78,16 @@ def main():
                 writer.writerow(CSV_HEADER)
 
             # Process all deployments across all clusters
-            deployments = responseJson["deployments"]
+            deployments = responseJson
 
             # Skip all openshift namespaces unless IS_INCLUDE_OPENSHIFT_NAMESPACE is True
-            deploymentsToBeInspected = deployments if IS_INCLUDE_OPENSHIFT_NAMESPACE else [deployment for deployment in deployments if not deployment["namespace"].startswith("openshift")] 
+            deploymentsToBeInspected = deployments if IS_INCLUDE_OPENSHIFT_NAMESPACE else [deployment for deployment in deployments if not deployment["result"]["deployment"]["namespace"].startswith("openshift")] 
 
             deploymentCount = len(deploymentsToBeInspected)
             currentDeploymentIndex = 0
-            for deployment in deploymentsToBeInspected:
-                clusterName = deployment["cluster"]
+            for exportResult in deploymentsToBeInspected:
+                deployment = exportResult["result"]["deployment"]
+                clusterName = deployment["clusterName"]
                 clusterEnvironment = ""
                 clusterDescriptor = ""
 
@@ -113,117 +114,112 @@ def main():
                 currentDeploymentIndex += 1
                 print(f"{currentDeploymentIndex} of {deploymentCount} - Inspecting {clusterName}/{namespace}/{deploymentName}...")
 
-                try:
-                    responseJson = getJsonFromRhacsApi("/deployments/" + deploymentId)
-                    if responseJson is not None:
-                        containers = responseJson["containers"]
-                        for container in containers:
-                            image = container["image"]
-                            imageId = image["id"]
-                            imageFullName = image["name"]["fullName"]
-                            
-                            # Get the image detail
-                            createdOn = ""
-                            os = ""
-                            ubiName = ""
-                            ubiVersion = ""
-                            ubiRelease = ""
+                # Loop through all containers within this deployment
+                containers = deployment["containers"]
+                for container in containers:
+                    image = container["image"]
+                    imageId = image["id"]
+                    imageFullName = image["name"]["fullName"]
+                    
+                    # Get the image detail
+                    createdOn = ""
+                    os = ""
+                    ubiName = ""
+                    ubiVersion = ""
+                    ubiRelease = ""
+                    try:
+                        print(f"{imageFullName}")
+                        responseJson = getJsonFromRhacsApi("/images/" + imageId)
+                        if responseJson is not None:
+                            metadataJson = responseJson["metadata"]["v1"]
+                            createdOn = metadataJson["created"]
+
+                            # Try to convert createdOn from ISO format to a more readable format
                             try:
-                                print(f"{imageFullName}")
-                                responseJson = getJsonFromRhacsApi("/images/" + imageId)
-                                if responseJson is not None:
-                                    metadataJson = responseJson["metadata"]["v1"]
-                                    createdOn = metadataJson["created"]
+                                createdOn = datetime.fromisoformat(createdOn).astimezone().strftime(DATETIME_FORMAT)
+                            except:
+                                pass
 
-                                    # Try to convert createdOn from ISO format to a more readable format
-                                    try:
-                                        createdOn = datetime.fromisoformat(createdOn).astimezone().strftime(DATETIME_FORMAT)
-                                    except:
-                                        pass
+                            os = responseJson["scan"]["operatingSystem"]
 
-                                    os = responseJson["scan"]["operatingSystem"]
+                            # Get more details if it's a rhel-based image
+                            if os.startswith(OS_ID_RHEL):
+                                for layer in metadataJson["layers"]:
+                                    if layer["instruction"] == "LABEL":
+                                        value = layer["value"]
+                                        # UBI-specific metadata checking
+                                        if UBI_IDENTIFIER_IN_LABEL in value:
+                                            regexResult = re.search(UBI_REGEX, value)
+                                            if regexResult is not None:
+                                                ubiName = regexResult.group(1)
+                                                ubiVersion = regexResult.group(2)
+                                                ubiRelease = regexResult.group(3)
+                                                # Exit the current loop
+                                                break
 
-                                    # Get more details if it's a rhel-based image
-                                    if os.startswith(OS_ID_RHEL):
-                                        for layer in metadataJson["layers"]:
-                                            if layer["instruction"] == "LABEL":
-                                                value = layer["value"]
-                                                # UBI-specific metadata checking
-                                                if UBI_IDENTIFIER_IN_LABEL in value:
-                                                    regexResult = re.search(UBI_REGEX, value)
-                                                    if regexResult is not None:
-                                                        ubiName = regexResult.group(1)
-                                                        ubiVersion = regexResult.group(2)
-                                                        ubiRelease = regexResult.group(3)
-                                                        # Exit the current loop
-                                                        break
+                                # If the base image labels have been removed,
+                                # try to get the metadata from the url
+                                if ubiName == "":
+                                    labels = metadataJson["labels"]
+                                    if hasattr(labels, "url"):
+                                        regexResult = re.search(UBI_REGEX, labels["url"])
+                                        if regexResult is not None:
+                                            ubiName = regexResult.group(1)
+                                            ubiVersion = regexResult.group(2)
+                                            ubiRelease = regexResult.group(3)
+                                    
+                                    # If that failed, try to get the metadata from the labels
+                                    if ubiName == "":
+                                        ubiName = labels["name"]
+                                        ubiVersion = labels["version"]
+                                        ubiRelease = labels["release"]
 
-                                        # If the base image labels have been removed,
-                                        # try to get the metadata from the url
-                                        if ubiName == "":
-                                            labels = metadataJson["labels"]
-                                            if hasattr(labels, "url"):
-                                                regexResult = re.search(UBI_REGEX, labels["url"])
-                                                if regexResult is not None:
-                                                    ubiName = regexResult.group(1)
-                                                    ubiVersion = regexResult.group(2)
-                                                    ubiRelease = regexResult.group(3)
-                                            
-                                            # If that failed, try to get the metadata from the labels
-                                            if ubiName == "":
-                                                ubiName = labels["name"]
-                                                ubiVersion = labels["version"]
-                                                ubiRelease = labels["release"]
+                                # Ignore non-ubi metadata
+                                if not ubiName.startswith(UBI_PREFIX):
+                                    ubiName = ""
+                                    ubiVersion = ""
+                                    ubiRelease = ""
 
-                                        # Ignore non-ubi metadata
-                                        if not ubiName.startswith(UBI_PREFIX):
-                                            ubiName = ""
-                                            ubiVersion = ""
-                                            ubiRelease = ""
+                    except Exception as ex:
+                        os = type(ex)
+                        ubiName = ex
+                        print(f"Image:{imageFullName} has the following ERROR:{type(ex)=}:{ex=}.")
 
-                            except Exception as ex:
-                                os = type(ex)
-                                ubiName = ex
-                                print(f"Image:{imageFullName} has the following ERROR:{type(ex)=}:{ex=}.")
-
-                            finally:
-                                # Write the image detail into the file
-                                if outputFormat == "csv":
-                                    outputRow = [
-                                        clusterName,
-                                        clusterEnvironment,
-                                        clusterDescriptor,
-                                        namespace,
-                                        applicationCode,
-                                        deploymentName,
-                                        imageFullName,
-                                        createdOn,
-                                        os,
-                                        ubiName,
-                                        ubiVersion,
-                                        ubiRelease
-                                    ]
-                                    writer.writerow(outputRow)
-                                elif outputFormat == "json":
-                                    outputRow = {
-                                        "clusterName": clusterName,
-                                        "clusterEnvironment": clusterEnvironment,
-                                        "clusterDescriptor": clusterDescriptor,
-                                        "namespace": namespace,
-                                        "applicationCode": applicationCode,
-                                        "deploymentName": deploymentName,
-                                        "imageFullName": imageFullName,
-                                        "createdOn": createdOn,
-                                        "os": os,
-                                        "ubiName": ubiName,
-                                        "ubiVersion": ubiVersion,
-                                        "ubiRelease": ubiRelease
-                                    }
-                                    json.dump(outputRow, f, ensure_ascii=False)
-                                f.flush()
-
-                except Exception as ex:
-                    print(f"Not completing {clusterName}/{namespace}/{deploymentName} due to ERROR:{type(ex)=}:{ex=}.")
+                    finally:
+                        # Write the image detail into the file
+                        if outputFormat == "csv":
+                            outputRow = [
+                                clusterName,
+                                clusterEnvironment,
+                                clusterDescriptor,
+                                namespace,
+                                applicationCode,
+                                deploymentName,
+                                imageFullName,
+                                createdOn,
+                                os,
+                                ubiName,
+                                ubiVersion,
+                                ubiRelease
+                            ]
+                            writer.writerow(outputRow)
+                        elif outputFormat == "json":
+                            outputRow = {
+                                "clusterName": clusterName,
+                                "clusterEnvironment": clusterEnvironment,
+                                "clusterDescriptor": clusterDescriptor,
+                                "namespace": namespace,
+                                "applicationCode": applicationCode,
+                                "deploymentName": deploymentName,
+                                "imageFullName": imageFullName,
+                                "createdOn": createdOn,
+                                "os": os,
+                                "ubiName": ubiName,
+                                "ubiVersion": ubiVersion,
+                                "ubiRelease": ubiRelease
+                            }
+                            json.dump(outputRow, f, ensure_ascii=False)
+                        f.flush()
 
         print(f"Successfully generated {outputFileName}\n")
                     
@@ -238,6 +234,25 @@ def getJsonFromRhacsApi(requestPath):
             return None
         else:
             return json.loads(response.read())
+
+# Export APIs contain multiple {...}{...}{...}, one line is one object {...}
+# Result size could be large
+def getJsonFromRhacsExportApi(requestPath):
+    url=rhacsCentralUrl + "/v1/export" + requestPath
+    with urlopen(Request(
+        url=url,
+        headers=authorizationHeader),
+        context=requestContext) as response:
+        if response.status != 200:
+            print(f"Error: {response.status} - {response.msg} for request:{url}")
+            return None
+        else:
+            # Read the response line by line
+            jsonResults = []
+            for oneLine in response:
+                jsonResults.append(json.loads(oneLine))
+            
+            return jsonResults
         
 if __name__=="__main__": 
     main() 
