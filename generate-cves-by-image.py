@@ -88,7 +88,14 @@ class CveDetail:
         self.cve = {}
         self.namespaces = []
         self.applicationCodes = []
-        self.images = []
+        self.imageDetails = {}
+
+class ImageDetail:
+    def __init__(self) -> None:
+        self.imageId = ""
+        self.imageFullName = ""
+        self.cveId = ""
+        self.firstImageOccurrence = ""
 
 # Main function
 def main():
@@ -173,8 +180,9 @@ def main():
             containers = deployment["containers"]
             for container in containers:
                 image = container["image"]
-                imageId = image["id"]
-                imageFullName = image["name"]["fullName"]
+                imageDetail = ImageDetail()
+                imageDetail.imageId = image["id"]
+                imageDetail.imageFullName = image["name"]["fullName"]
                 
                 # Get the image detail
                 createdOn = ""
@@ -182,61 +190,63 @@ def main():
                 ubiName = ""
                 ubiVersion = ""
                 ubiRelease = ""
+                scanElement = None
                 try:
-                    responseJson = getJsonFromRhacsApi("/images/" + imageId)
+                    responseJson = getJsonFromRhacsApi("/images/" + imageDetail.imageId)
                     if responseJson is not None:
                         metadataJson = responseJson["metadata"]["v1"]
                         createdOn = metadataJson["created"]
-                        os = responseJson["scan"]["operatingSystem"]
+                        scanElement = responseJson["scan"]
+                        if scanElement is not None:
+                            os = scanElement["operatingSystem"]
 
-                        # Get more details if it's a rhel-based image
-                        if os.startswith(OS_ID_RHEL):
-                            for layer in metadataJson["layers"]:
-                                if layer["instruction"] == "LABEL":
-                                    value = layer["value"]
-                                    # UBI-specific metadata checking
-                                    if UBI_IDENTIFIER_IN_LABEL in value:
-                                        regexResult = re.search(UBI_REGEX, value)
+                            # Get more details if it's a rhel-based image
+                            if os.startswith(OS_ID_RHEL):
+                                for layer in metadataJson["layers"]:
+                                    if layer["instruction"] == "LABEL":
+                                        value = layer["value"]
+                                        # UBI-specific metadata checking
+                                        if UBI_IDENTIFIER_IN_LABEL in value:
+                                            regexResult = re.search(UBI_REGEX, value)
+                                            if regexResult is not None:
+                                                ubiName = regexResult.group(1)
+                                                ubiVersion = regexResult.group(2)
+                                                ubiRelease = regexResult.group(3)
+                                                # Exit the current loop
+                                                break
+
+                                # If the base image labels have been removed,
+                                # try to get the metadata from the url
+                                if ubiName == "":
+                                    labels = metadataJson["labels"]
+                                    if hasattr(labels, "url"):
+                                        regexResult = re.search(UBI_REGEX, labels["url"])
                                         if regexResult is not None:
                                             ubiName = regexResult.group(1)
                                             ubiVersion = regexResult.group(2)
                                             ubiRelease = regexResult.group(3)
-                                            # Exit the current loop
-                                            break
+                                    
+                                    # If that failed, try to get the metadata from the labels
+                                    if ubiName == "":
+                                        ubiName = labels["name"]
+                                        ubiVersion = labels["version"]
+                                        ubiRelease = labels["release"]
 
-                            # If the base image labels have been removed,
-                            # try to get the metadata from the url
-                            if ubiName == "":
-                                labels = metadataJson["labels"]
-                                if hasattr(labels, "url"):
-                                    regexResult = re.search(UBI_REGEX, labels["url"])
-                                    if regexResult is not None:
-                                        ubiName = regexResult.group(1)
-                                        ubiVersion = regexResult.group(2)
-                                        ubiRelease = regexResult.group(3)
-                                
-                                # If that failed, try to get the metadata from the labels
-                                if ubiName == "":
-                                    ubiName = labels["name"]
-                                    ubiVersion = labels["version"]
-                                    ubiRelease = labels["release"]
-
-                            # Ignore non-ubi metadata
-                            if not ubiName.startswith(UBI_PREFIX):
-                                ubiName = ""
-                                ubiVersion = ""
-                                ubiRelease = ""
+                                # Ignore non-ubi metadata
+                                if not ubiName.startswith(UBI_PREFIX):
+                                    ubiName = ""
+                                    ubiVersion = ""
+                                    ubiRelease = ""
 
                 except Exception as ex:
                     os = type(ex)
                     ubiName = ex
-                    print(f"Image:{imageFullName} has the following ERROR:{type(ex)=}:{ex=}.")
+                    print(f"Image:{imageDetail.imageFullName} has the following ERROR:{type(ex)=}:{ex=}.")
 
                 finally:
                     # Get the list of CVEs
-                    scanComponents = responseJson["scan"]["components"]
-                    if scanComponents is not None:
-                        for component in scanComponents:
+                    if scanElement is not None:
+                        for component in scanElement["components"]:
                             for cve in component["vulns"]:
                                 # Add to the list of CVEs if it has not been added
                                 cveId = cve["cve"]
@@ -250,10 +260,12 @@ def main():
                                     currentCveDetail.namespaces.append(namespace)
                                 if applicationCode not in currentCveDetail.applicationCodes:
                                     currentCveDetail.applicationCodes.append(applicationCode)
-                                if imageFullName not in currentCveDetail.images:
-                                    currentCveDetail.images.append(imageFullName)
+                                if imageDetail.imageId not in currentCveDetail.imageDetails:
+                                    imageDetail.cveId = cveId
+                                    imageDetail.firstImageOccurrence = cve["firstImageOccurrence"]
+                                    currentCveDetail.imageDetails[imageDetail.imageId] = imageDetail
                     else:
-                        print(f"WARNING:Image {imageFullName} does not have scan.components.")
+                        print(f"WARNING:Image {imageDetail.imageFullName} does not have the scan element.")
 
     # Create the CSV file
     with open(outputFileName, "w", newline="", encoding="utf-8") as f:
@@ -278,6 +290,10 @@ def main():
                 except:
                     pass
 
+                # Prepare the image list and their corresponding first discovered times
+                imageFullNames = "\n".join(cveDetail.imageDetails[x].imageFullName for x in cveDetail.imageDetails)
+                imageFirstOccurrences = "\n".join(cveDetail.imageDetails[x].firstImageOccurrence for x in cveDetail.imageDetails)
+
                 if outputFormat == "csv":
                     outputRow = [
                         clusterDetail.clusterName,
@@ -290,7 +306,7 @@ def main():
                         "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
                         "\n".join(cveDetail.namespaces),
                         "\n".join(cveDetail.applicationCodes),
-                        "\n".join(cveDetail.images),
+                        "\n".join(imageFullNames),
                         cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
                         cveData["firstSystemOccurrence"],
                         cveData["link"],
@@ -309,7 +325,7 @@ def main():
                         "impactScore": "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
                         "namespaces": "\n".join(cveDetail.namespaces),
                         "applicationCodes": "\n".join(cveDetail.applicationCodes),
-                        "images": "\n".join(cveDetail.images),
+                        "images": "\n".join(imageFullNames),
                         "publishedOn": cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
                         "discoveredOn": cveData["firstSystemOccurrence"],
                         "link": cveData["link"],
