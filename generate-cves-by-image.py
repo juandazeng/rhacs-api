@@ -234,22 +234,26 @@ def main():
 
                 finally:
                     # Get the list of CVEs
-                    for component in responseJson["scan"]["components"]:
-                        for cve in component["vulns"]:
-                            # Add to the list of CVEs if it has not been added
-                            cveId = cve["cve"]
-                            if cveId not in currentClusterDetail.cveDetails:
-                                currentClusterDetail.cveDetails[cveId] = CveDetail()
+                    scanComponents = responseJson["scan"]["components"]
+                    if scanComponents is not None:
+                        for component in scanComponents:
+                            for cve in component["vulns"]:
+                                # Add to the list of CVEs if it has not been added
+                                cveId = cve["cve"]
+                                if cveId not in currentClusterDetail.cveDetails:
+                                    currentClusterDetail.cveDetails[cveId] = CveDetail()
 
-                            currentCveDetail = currentClusterDetail.cveDetails[cveId]
-                            
-                            currentCveDetail.cve = cve
-                            if namespace not in currentCveDetail.namespaces:
-                                currentCveDetail.namespaces.append(namespace)
-                            if applicationCode not in currentCveDetail.applicationCodes:
-                                currentCveDetail.applicationCodes.append(applicationCode)
-                            if imageFullName not in currentCveDetail.images:
-                                currentCveDetail.images.append(imageFullName)
+                                currentCveDetail = currentClusterDetail.cveDetails[cveId]
+                                
+                                currentCveDetail.cve = cve
+                                if namespace not in currentCveDetail.namespaces:
+                                    currentCveDetail.namespaces.append(namespace)
+                                if applicationCode not in currentCveDetail.applicationCodes:
+                                    currentCveDetail.applicationCodes.append(applicationCode)
+                                if imageFullName not in currentCveDetail.images:
+                                    currentCveDetail.images.append(imageFullName)
+                    else:
+                        print(f"WARNING:Image {imageFullName} does not have scan.components.")
 
     # Create the CSV file
     with open(outputFileName, "w", newline="", encoding="utf-8") as f:
