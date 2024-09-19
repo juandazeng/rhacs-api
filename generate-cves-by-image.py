@@ -183,6 +183,7 @@ def main():
                 imageDetail = ImageDetail()
                 imageDetail.imageId = image["id"]
                 imageDetail.imageFullName = image["name"]["fullName"]
+                print(f"Inspecting image {imageDetail.imageId=};{imageDetail.imageFullName=}...")
                 
                 # Get the image detail
                 createdOn = ""
@@ -291,8 +292,15 @@ def main():
                     pass
 
                 # Prepare the image list and their corresponding first discovered times
-                imageFullNames = "\n".join(cveDetail.imageDetails[x].imageFullName for x in cveDetail.imageDetails)
-                imageFirstOccurrences = "\n".join(cveDetail.imageDetails[x].firstImageOccurrence for x in cveDetail.imageDetails)
+                imageFullNameList = []
+                imageFirstOccurrenceList = []
+                for imageKey in cveDetail.imageDetails:
+                    imageDetail = cveDetail.imageDetails[imageKey]
+                    imageFullNameList.append(imageDetail.imageFullName)
+                    imageFirstOccurrenceList.append(imageDetail.firstImageOccurrence)
+
+                imageFullNames = "\n".join(imageFullNameList)
+                imageFirstOccurrences = "\n".join(imageFirstOccurrenceList)
 
                 if outputFormat == "csv":
                     outputRow = [
