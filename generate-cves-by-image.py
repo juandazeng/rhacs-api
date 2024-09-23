@@ -314,7 +314,7 @@ def main():
                         "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
                         "\n".join(cveDetail.namespaces),
                         "\n".join(cveDetail.applicationCodes),
-                        "\n".join(imageFullNames),
+                        imageFullNames,
                         cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
                         cveData["firstSystemOccurrence"],
                         cveData["link"],
@@ -333,7 +333,7 @@ def main():
                         "impactScore": "{0:.2f}".format(cveData["cvssV3"]["impactScore"]) if cveData["cvssV3"] is not None else "0.00",
                         "namespaces": "\n".join(cveDetail.namespaces),
                         "applicationCodes": "\n".join(cveDetail.applicationCodes),
-                        "images": "\n".join(imageFullNames),
+                        "images": imageFullNames,
                         "publishedOn": cveData["publishedOn"] if cveData["publishedOn"] is not None else "",
                         "discoveredOn": cveData["firstSystemOccurrence"],
                         "link": cveData["link"],
@@ -376,4 +376,4 @@ def getJsonFromRhacsExportApi(requestPath):
             return jsonResults
         
 if __name__=="__main__": 
-    main() 
+    main()
